@@ -244,3 +244,15 @@ class PoseEMAFilter:
                 ]
         self.history[track_id] = smoothed.copy()
         return smoothed
+
+    def remove(self, track_id: object) -> None:
+        """移除指定跟踪目标的关键点历史缓存.
+
+        Args:
+            track_id: 外部跟踪标识；不存在时静默忽略.
+        """
+        self.history.pop(track_id, None)
+
+    def clear(self) -> None:
+        """清空全部跟踪目标的关键点历史缓存."""
+        self.history.clear()

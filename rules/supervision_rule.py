@@ -40,7 +40,7 @@ class SupervisionRule(BaseRule):
         self._flow_counter = 0
         self._flow_start_sec = 0
         self._flow_start_source = ""
-        self._target_role: Optional[str] = None
+        self._target_role = None
 
         # 内容检查清单
         # code_repeat: 九字码复述  execution: 执行命令  verification: 核对确认
@@ -60,18 +60,14 @@ class SupervisionRule(BaseRule):
 
         # 最近举手（时间+角色），供启动时指定监护对象
         self._last_hand_raise_ts = -999.0
-        self._last_hand_raise_role: Optional[str] = None
+        self._last_hand_raise_role = None
 
         # 各操作员最新距离状态 + 是否曾绑定
         self._operator_states: Dict[str, str] = {}
         self._ever_bound = False
 
     def name(self) -> str:
-        """制度名称.
-
-        Returns:
-            制度名称字符串.
-        """
+        """制度名称."""
         return "supervision"
 
     def subscribe_events(self, event_bus: EventBus) -> None:
@@ -199,11 +195,7 @@ class SupervisionRule(BaseRule):
         return flow
 
     def _on_voice_intent(self, event: Dict[str, Any]) -> None:
-        """处理语音事件.
-
-        Args:
-            event: 事件载荷, 含 localSec 与 key_moment 字段.
-        """
+        """处理语音事件."""
         payload = event.get("data", {})
         timestamp = payload.get("localSec", event.get("ts", 0.0))
         key_moment = payload.get("key_moment", "")
@@ -212,7 +204,7 @@ class SupervisionRule(BaseRule):
 
         # 启动流程判定：语音"监护"/"请求监护"即启动，5秒内举手则指定监护对象
         if not self._active:
-            is_supervision_word = (key_moment in ["监护", "请求监护"])
+            is_supervision_word = (key_moment in ["请监护", "请求监护"])
             has_hand_raise = (abs(timestamp - self._last_hand_raise_ts) <= 5.0)
 
             if is_supervision_word:
@@ -223,7 +215,7 @@ class SupervisionRule(BaseRule):
         # 流程运行中：非控制关键字视为设备识别码（九字码）
         if self._active:
             is_device_code = key_moment not in [
-                "监护", "请求监护", "执行", "核对", "信息通报", "信息通告", "通报完毕", "通告完毕"
+                "监护", "请监护", "请求监护", "执行", "核对", "信息通报", "信息通告", "通报完毕", "通告完毕"
             ]
             if is_device_code:
                 self._checklist["code_repeat"] = True
@@ -233,31 +225,19 @@ class SupervisionRule(BaseRule):
                 self._checklist["verification"] = True
 
     def _on_finger_screen(self, event: Dict[str, Any]) -> None:
-        """处理手指指向屏幕事件.
-
-        Args:
-            event: 事件载荷, 含 localSec 与判定字段.
-        """
+        """处理手指指向屏幕事件."""
         if self._active:
             self._checklist["finger_screen"] = True
             logger.info("监护制: 记录手指指向屏幕操作")
 
     def _on_finger_file(self, event: Dict[str, Any]) -> None:
-        """处理手指指向文件事件（有程序分支关键特征）.
-
-        Args:
-            event: 事件载荷, 含 localSec 与判定字段.
-        """
+        """处理手指指向文件事件（有程序分支关键特征）."""
         if self._active:
             self._checklist["finger_file"] = True
             logger.info("监护制: 记录手指指向文件操作(有程序分支关键特征)")
 
     def _on_hand_raised(self, event: Dict[str, Any]) -> None:
-        """处理 BEHAVIOR_HAND_RAISED 举手事件.
-
-        Args:
-            event: 事件载荷, 含 localSec 与 operator 字段.
-        """
+        """处理 BEHAVIOR_HAND_RAISED 举手事件."""
         payload = event.get("data", {})
         timestamp = payload.get("localSec", event.get("ts", 0))
         # 身份由跟踪模块赋予后随事件下发；缺失时保留 None，不自行赋予
@@ -269,11 +249,7 @@ class SupervisionRule(BaseRule):
         logger.debug(f"监护制: 收到举手事件 @{timestamp:.1f}s")
 
     def _on_proximity_update(self, event: Dict[str, Any]) -> None:
-        """处理 TRACKER_PROXIMITY 距离状态更新，实现状态机转移.
-
-        Args:
-            event: 事件载荷, 含 localSec、state 与 operator 字段.
-        """
+        """处理 TRACKER_PROXIMITY 距离状态更新，实现状态机转移."""
         payload = event.get("data", {})
         timestamp = payload.get("localSec", event.get("ts", 0))
         state = payload.get("state", "")
@@ -376,11 +352,7 @@ class SupervisionRule(BaseRule):
         self._ever_bound = False
 
     def save_results(self, result_dir: str) -> None:
-        """规则层不保存 key_moment 文件（由 tracker 通过事件流接收并保存）.
-
-        Args:
-            result_dir: 结果目录路径.
-        """
+        """规则层不保存 key_moment 文件（由 tracker 通过事件流接收并保存）."""
         pass
 
 
