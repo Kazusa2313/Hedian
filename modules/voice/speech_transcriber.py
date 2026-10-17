@@ -6,6 +6,7 @@ no_repeat_ngram=3），同时保留 ForcedAligner 产出字级时间戳；段间
 重叠由全局词流去重。随后应用繁转简、拼音纠错、设备码归一化与关键词匹配，
 产出带时间戳的词表与关键事件（key_moment）。
 """
+
 import logging
 import os
 import re
@@ -19,25 +20,32 @@ logger = logging.getLogger("module.voice.transcriber")
 # 后处理纠错规则
 CORRECTIONS = [
     # 请求监护
-    ("请调监控", "请求监护"), ("请调监护", "请求监护"),
-    ("请台监护", "请求监护"), ("请台军务", "请求监护"),
-    ("请结束", "请求监护"), ("请求进入", "请求监护"), ("请求接入", "请求监护"),
+    ("请调监控", "请求监护"),
+    ("请调监护", "请求监护"),
+    ("请台监护", "请求监护"),
+    ("请台军务", "请求监护"),
+    ("请结束", "请求监护"),
+    ("请求进入", "请求监护"),
+    ("请求接入", "请求监护"),
     ("台军务", "请求监护"),
-
     # 核实/核对
-    ("合适正确", "核实正确"), ("合适", "核实"),
-
+    ("合适正确", "核实正确"),
+    ("合适", "核实"),
     # 执行
     ("可以进行", "可以执行"),
-
     # 常见术语
-    ("试验", "实验"), ("业证", "验证"),
-    ("注入条件", "出入条件"), ("处理条件", "出入条件"),
-    ("可以报警了", "报警"), ("正常出发", "正常触发"),
-
+    ("试验", "实验"),
+    ("业证", "验证"),
+    ("注入条件", "出入条件"),
+    ("处理条件", "出入条件"),
+    ("可以报警了", "报警"),
+    ("正常出发", "正常触发"),
     # 幻觉过滤
-    ("请使用简体中文输出", ""), ("请不吝点赞", ""), ("订阅", ""),
-    ("谢谢大家", ""), ("谢谢", ""),
+    ("请使用简体中文输出", ""),
+    ("请不吝点赞", ""),
+    ("订阅", ""),
+    ("谢谢大家", ""),
+    ("谢谢", ""),
 ]
 
 
@@ -57,7 +65,7 @@ def apply_corrections(text: str) -> str:
         reverse=True,
     ):
         corrected = corrected.replace(wrong, right)
-    return re.sub(r'[。，]{3,}', '。', corrected)
+    return re.sub(r"[。，]{3,}", "。", corrected)
 
 
 # ======================== Qwen3-ASR 辅助函数 ========================
@@ -131,17 +139,28 @@ def normalize_qwen_results(
         words = []
         for stamp in raw_timestamps:
             word_text = str(
-                _read_attr_or_key(stamp, "text", "word", "token", default="") or ""
+                _read_attr_or_key(stamp, "text", "word", "token", default="")
+                or ""
             ).strip()
             if not word_text:
                 continue
-            start = _safe_float(_read_attr_or_key(stamp, "start_time", "start", "begin_time", default=0.0))
-            end = _safe_float(_read_attr_or_key(stamp, "end_time", "end", "finish_time", default=start))
-            words.append({
-                "start": float(start),
-                "end": float(end if end >= start else start),
-                "word": word_text,
-            })
+            start = _safe_float(
+                _read_attr_or_key(
+                    stamp, "start_time", "start", "begin_time", default=0.0
+                )
+            )
+            end = _safe_float(
+                _read_attr_or_key(
+                    stamp, "end_time", "end", "finish_time", default=start
+                )
+            )
+            words.append(
+                {
+                    "start": float(start),
+                    "end": float(end if end >= start else start),
+                    "word": word_text,
+                }
+            )
 
         if words:
             start = min(word_item["start"] for word_item in words)
@@ -226,7 +245,13 @@ class SpeechTranscriber:
 
             # 配置推理参数（与 run_infer.py 评估链路对齐：贪心 + no_repeat_ngram=3）
             device_map = "cuda:0" if self.device == "cuda" else "cpu"
-            torch_dtype = getattr(torch, self.torch_dtype) if self.torch_dtype else (torch.bfloat16 if self.device == "cuda" else torch.float32)
+            torch_dtype = (
+                getattr(torch, self.torch_dtype)
+                if self.torch_dtype
+                else (
+                    torch.bfloat16 if self.device == "cuda" else torch.float32
+                )
+            )
 
             kwargs = {
                 "dtype": torch_dtype,
@@ -245,18 +270,24 @@ class SpeechTranscriber:
                     "dtype": torch_dtype,
                     "device_map": device_map,
                 }
-                logger.info(f"开启 Word-level Aligner 对齐器: {self.aligner_path}")
+                logger.info(
+                    f"开启 Word-level Aligner 对齐器: {self.aligner_path}"
+                )
             else:
-                logger.warning("未检测到或未配置对齐器 Aligner 路径，将仅使用 ASR 段级时间戳")
+                logger.warning(
+                    "未检测到或未配置对齐器 Aligner 路径，将仅使用 ASR 段级时间戳"
+                )
 
             logger.info(f"正在从本地加载 Qwen3-ASR 模型: {self.model_path}")
-            self._model = Qwen3ASRModel.from_pretrained(self.model_path, **kwargs)
+            self._model = Qwen3ASRModel.from_pretrained(
+                self.model_path, **kwargs
+            )
             logger.info("Qwen3-ASR 模型加载完成")
         except Exception as e:
             logger.error(f"模型加载失败: {e}", exc_info=True)
             raise
 
-    # ======================== 流式转写（增量读入 + 在线切片 + 逐段解码） ========================
+    # ============ 流式转写（增量读入 + 在线切片 + 逐段解码） ============
 
     def transcribe_stream(
         self,
@@ -282,7 +313,8 @@ class SpeechTranscriber:
         Args:
             source: 音频/视频路径，或直播 URL（rtsp/rtmp/http）.
             progress_callback: 进度回调 callback(current_sec, total_sec)，可为 None.
-            on_segment: 逐段回调 callback(words, seg_start, seg_end, total_sec)，可为 None.
+            on_segment: 逐段回调 callback(words, seg_start, seg_end, total_sec),
+            可为 None.
             segmenter_name: 切片策略名（见 segmenters.available_segmenters）.
             segmenter_config: 切片策略参数覆盖（覆盖 config.yaml 中的取值）.
             total_seconds: 已知总时长（秒），用于进度百分比；直播源传 0.
@@ -295,10 +327,16 @@ class SpeechTranscriber:
         self._load_model()
 
         from modules.voice.segmenters import build_segmenter
-        from modules.voice.streaming_source import PcmRing, PcmStream, is_live_source
+        from modules.voice.streaming_source import (
+            PcmRing,
+            PcmStream,
+            is_live_source,
+        )
 
         segmenter = build_segmenter(
-            segmenter_name, sample_rate=self.sample_rate, **(segmenter_config or {})
+            segmenter_name,
+            sample_rate=self.sample_rate,
+            **(segmenter_config or {}),
         )
         logger.info("流式切片策略生效: %s", segmenter.describe())
 
@@ -306,7 +344,9 @@ class SpeechTranscriber:
             try:
                 total_seconds = self._probe_duration(source)
             except Exception as probe_error:  # 时长探测失败不影响转写
-                logger.warning("总时长探测失败，进度百分比将不可用: %s", probe_error)
+                logger.warning(
+                    "总时长探测失败，进度百分比将不可用: %s", probe_error
+                )
                 total_seconds = 0.0
 
         overlap = max(0.0, float(boundary_overlap_sec))
@@ -318,11 +358,14 @@ class SpeechTranscriber:
 
         try:
             from opencc import OpenCC
+
             converter = OpenCC("t2s")
         except ImportError:
             converter = None
 
-        has_aligner = bool(self.aligner_path and os.path.exists(self.aligner_path))
+        has_aligner = bool(
+            self.aligner_path and os.path.exists(self.aligner_path)
+        )
         all_words: List[Dict[str, Any]] = []
         segment_count = 0
         last_progress_sec = 0.0
@@ -346,11 +389,15 @@ class SpeechTranscriber:
                     language="Chinese",
                     return_time_stamps=has_aligner,
                 )
-                normalized = normalize_qwen_results(results, duration_seconds=seg_duration)
+                normalized = normalize_qwen_results(
+                    results, duration_seconds=seg_duration
+                )
             except Exception as decode_error:
                 logger.warning(
                     "流式段解码失败 (%.1f-%.1fs): %s",
-                    segment.start, segment.end, decode_error,
+                    segment.start,
+                    segment.end,
+                    decode_error,
                 )
                 return
 
@@ -363,18 +410,36 @@ class SpeechTranscriber:
                     continue
                 if item.get("words"):
                     for word_item in item["words"]:
-                        segment_words.append({
-                            "start": round(take_start + float(word_item.get("start", 0.0)), 3),
-                            "end": round(take_start + float(word_item.get("end", 0.0)), 3),
-                            "word": word_item.get("word") or word_item.get("text") or "",
-                        })
+                        segment_words.append(
+                            {
+                                "start": round(
+                                    take_start
+                                    + float(word_item.get("start", 0.0)),
+                                    3,
+                                ),
+                                "end": round(
+                                    take_start
+                                    + float(word_item.get("end", 0.0)),
+                                    3,
+                                ),
+                                "word": word_item.get("word")
+                                or word_item.get("text")
+                                or "",
+                            }
+                        )
                 else:
                     # 无字级时间戳时退回段级，起点按整段摊平
-                    segment_words.append({
-                        "word": text,
-                        "start": round(take_start + float(item.get("start", 0.0)), 3),
-                        "end": round(take_start + float(item.get("end", 0.0)), 3),
-                    })
+                    segment_words.append(
+                        {
+                            "word": text,
+                            "start": round(
+                                take_start + float(item.get("start", 0.0)), 3
+                            ),
+                            "end": round(
+                                take_start + float(item.get("end", 0.0)), 3
+                            ),
+                        }
+                    )
 
             if not segment_words:
                 return
@@ -382,20 +447,30 @@ class SpeechTranscriber:
             segment_count += 1
             logger.debug(
                 "流式段 #%d %.1f-%.1fs: %d 词",
-                segment.index, segment.start, segment.end, len(segment_words),
+                segment.index,
+                segment.start,
+                segment.end,
+                len(segment_words),
             )
             if on_segment:
-                on_segment(segment_words, segment.start, segment.end, total_seconds)
+                on_segment(
+                    segment_words, segment.start, segment.end, total_seconds
+                )
 
         try:
-            with PcmStream(source, sample_rate=self.sample_rate, block_sec=block_sec) as stream:
+            with PcmStream(
+                source, sample_rate=self.sample_rate, block_sec=block_sec
+            ) as stream:
                 cursor_sec = 0.0
                 for pcm in stream:
                     block_start = cursor_sec
                     ring.append(pcm, block_start)
                     cursor_sec = block_start + len(pcm) / self.sample_rate
                     # 进度按 0.3s 节流，避免每 0.2s 都触发一次上报
-                    if progress_callback and cursor_sec - last_progress_sec >= 0.3:
+                    if (
+                        progress_callback
+                        and cursor_sec - last_progress_sec >= 0.3
+                    ):
                         last_progress_sec = cursor_sec
                         progress_callback(cursor_sec, total_seconds)
                     for segment in segmenter.push(pcm, block_start):
@@ -407,7 +482,9 @@ class SpeechTranscriber:
 
         logger.info(
             "流式转录完成，共 %d 段 / %d 个词（策略=%s）",
-            segment_count, len(all_words), segmenter.name,
+            segment_count,
+            len(all_words),
+            segmenter.name,
         )
         return all_words
 
@@ -416,11 +493,21 @@ class SpeechTranscriber:
     def _probe_duration(path: str) -> float:
         """用 ffprobe 获取媒体时长（秒）."""
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "csv=p=0", path],
-            capture_output=True, text=True,
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                path,
+            ],
+            capture_output=True,
+            text=True,
         )
         return _safe_float(result.stdout.strip(), 0.0)
+
 
 # ======================== 文本归一化与关键词提取 ========================
 
@@ -435,26 +522,44 @@ NORM_DEVICE_PATTERN = re.compile(
     r"|LCO[0-9\.]+"
     r"|SM\d+"
     r")",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 CN_DIGITS = {
-    "零": 0, "〇": 0, "洞": 0,
-    "一": 1, "幺": 1, "腰": 1,
-    "二": 2, "两": 2,
-    "三": 3, "四": 4, "五": 5,
-    "六": 6, "七": 7, "八": 8, "九": 9,
+    "零": 0,
+    "〇": 0,
+    "洞": 0,
+    "一": 1,
+    "幺": 1,
+    "腰": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
 }
 
 CN_UNITS = {
-    "十": 10, "百": 100, "千": 1000,
+    "十": 10,
+    "百": 100,
+    "千": 1000,
 }
 
 LETTER_WORDS = {
-    "阿尔": "R", "艾儿": "R",
-    "艾斯": "S", "爱斯": "S",
-    "维": "V", "威": "V", "微": "V",
-    "批": "P", "屁": "P", "皮": "P",
+    "阿尔": "R",
+    "艾儿": "R",
+    "艾斯": "S",
+    "爱斯": "S",
+    "维": "V",
+    "威": "V",
+    "微": "V",
+    "批": "P",
+    "屁": "P",
+    "皮": "P",
     "诶": "A",
 }
 
@@ -550,7 +655,7 @@ LOOSE_DEVICE_PATTERN = re.compile(
     rf"|LCO[a-zA-Z0-9{_CN_DIGITS}\.点]+"
     rf"|S\s*M\s*[a-zA-Z0-9{_CN_DIGITS}]+"
     rf")",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 
@@ -576,7 +681,7 @@ def normalize_devices_in_text(text: str) -> str:
     # 预处理：去除所有的空格和制表符，以匹配 ASR 偶发的空格分割（如 "E E S" 或 "T 1 R P A"）
     cleaned_text = re.sub(r"\s+", "", text)
 
-    def _normalize_device_code(match):
+    def _normalize_device_code(match) -> str:
         """归一化单个设备码匹配片段并校验其长度合法性.
 
         Args:
@@ -589,15 +694,15 @@ def normalize_devices_in_text(text: str) -> str:
         # 根据前缀严格校验其各自正确的字符长度
         is_valid = False
         if normalized.startswith("1EAS"):
-            is_valid = (len(normalized) == 9)
+            is_valid = len(normalized) == 9
         elif normalized.startswith("T1RPA"):
-            is_valid = (len(normalized) == 8)
+            is_valid = len(normalized) == 8
         elif normalized.startswith("RPA"):
-            is_valid = (len(normalized) == 7)
+            is_valid = len(normalized) == 7
         elif normalized.startswith("LCO"):
-            is_valid = (len(normalized) == 8)
+            is_valid = len(normalized) == 8
         elif normalized.startswith("SM"):
-            is_valid = (len(normalized) == 3)
+            is_valid = len(normalized) == 3
 
         if is_valid:
             return normalized
@@ -638,8 +743,11 @@ def match_keyword_by_pinyin_levenshtein(
 
     # 滑动窗口比对拼音序列
     for window_offset in range(text_count - keyword_count + 1):
-        sub_pinyins = text_pinyins[window_offset:window_offset+keyword_count]
-        distance = sum(1 for p1, p2 in zip(sub_pinyins, keyword_pinyins) if p1 != p2)
+        win_end = window_offset + keyword_count
+        sub_pinyins = text_pinyins[window_offset:win_end]
+        distance = sum(
+            1 for p1, p2 in zip(sub_pinyins, keyword_pinyins) if p1 != p2
+        )
         if distance <= max_distance:
             return True
     return False
@@ -664,27 +772,29 @@ def match_keyword_by_pinyin(text: str, keyword: str) -> bool:
 
     # 动态设定最大编辑距离
     max_distance = 1 if len(keyword) >= 4 else 0
-    return match_keyword_by_pinyin_levenshtein(text, keyword, max_distance=max_distance)
+    return match_keyword_by_pinyin_levenshtein(
+        text, keyword, max_distance=max_distance
+    )
 
 
 # 关键词识别：(关键词, 标签) 列表 - 标签是发送给规则模块的 key_moment 值
 # 变体词归一化到标准标签，避免重复保存（如"监护"→"请求监护"，"核实"→"核对"）
 KEYWORD_LABELS = [
     ("请求监护", "请求监护"),
-    ("监护",     "请求监护"),
-    ("执行",     "执行"),
-    ("核对",     "核对"),
-    ("核实",     "核对"),
+    ("监护", "请求监护"),
+    ("执行", "执行"),
+    ("核对", "核对"),
+    ("核实", "核对"),
     ("信息通报", "信息通报"),
     ("信息通告", "信息通报"),
     ("通报完毕", "通报完毕"),
     ("通告完毕", "通报完毕"),
-    ("收到",     "收到"),
-    ("一回路",     "一回路"),
-    ("二回路",     "二回路"),
-    ("机组长",     "机组长"),
-    ("请讲",     "请讲"),
-    ("请监护",     "请监护")
+    ("收到", "收到"),
+    ("一回路", "一回路"),
+    ("二回路", "二回路"),
+    ("机组长", "机组长"),
+    ("请讲", "请讲"),
+    ("请监护", "请监护"),
 ]
 
 
@@ -715,7 +825,8 @@ def process_transcribed_words(
         return []
 
     words = [
-        word_item for word_item in words
+        word_item
+        for word_item in words
         if word_item is not None and word_item.get("word")
     ]
     if not words:
@@ -763,7 +874,8 @@ def process_transcribed_words(
         # 设备码提取：用 finditer 拆分串联码，提取所有合法 9 字符设备码
         normalized_text = normalize_spoken_text(text)
         device_codes = [
-            match.group(1) for match in NORM_DEVICE_PATTERN.finditer(normalized_text)
+            match.group(1)
+            for match in NORM_DEVICE_PATTERN.finditer(normalized_text)
         ]
 
         # 收集所有匹配的关键字，并**按其在句中的实际出现位置排序**。
@@ -801,7 +913,9 @@ def process_transcribed_words(
         for keyword, label in KEYWORD_LABELS:
             if keyword == "收到":
                 # "收到" 容易在长段落中误报，仅在完全一致或满足拼音相似度时才上报
-                matched = text.strip() == "收到" or match_keyword_by_pinyin(text, keyword)
+                matched = text.strip() == "收到" or match_keyword_by_pinyin(
+                    text, keyword
+                )
             else:
                 matched = match_keyword_by_pinyin(text, keyword)
             if not matched:
@@ -842,11 +956,13 @@ def process_transcribed_words(
                 events.append(event)
         else:
             # 没有关键词也推送完整文本（用于推理流展示）
-            events.append({
-                "localSec": audio_timestamp,
-                "text": text,
-                "key_moment": "",
-                "keys": [],
-            })
+            events.append(
+                {
+                    "localSec": audio_timestamp,
+                    "text": text,
+                    "key_moment": "",
+                    "keys": [],
+                }
+            )
 
     return events

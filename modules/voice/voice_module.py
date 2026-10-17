@@ -3,6 +3,7 @@
 继承 BaseModule，实现统一接口；转录产出的词表经关键词与设备码匹配后，
 既推送推理流供前端展示，也推送事件流供规则层判定，并实时增量落盘。
 """
+
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -66,9 +67,13 @@ class VoiceModule(BaseModule):
                 sample_rate=voice_config.get("sample_rate", 16000),
                 torch_dtype=voice_config.get("torch_dtype"),
                 vad_noise_db=voice_config.get("vad_noise_db", -35.0),
-                vad_min_silence_sec=voice_config.get("vad_min_silence_sec", 0.8),
+                vad_min_silence_sec=voice_config.get(
+                    "vad_min_silence_sec", 0.8
+                ),
                 vad_speech_pad_sec=voice_config.get("vad_speech_pad_sec", 0.2),
-                vad_min_speech_sec=voice_config.get("vad_min_speech_sec", 0.35),
+                vad_min_speech_sec=voice_config.get(
+                    "vad_min_speech_sec", 0.35
+                ),
                 vad_max_chunk_sec=voice_config.get("vad_max_chunk_sec", 30.0),
             )
 
@@ -149,29 +154,39 @@ class VoiceModule(BaseModule):
                     keys = event.get("keys", [])
                     if not keys and key_moment:
                         keys = [key_moment]
-                    self.push_display("voice", {
-                        "localSec": local_sec,
-                        "tag": "text",
-                        "data": {"text": display_text, "keys": keys}
-                    })
+                    self.push_display(
+                        "voice",
+                        {
+                            "localSec": local_sec,
+                            "tag": "text",
+                            "data": {"text": display_text, "keys": keys},
+                        },
+                    )
                     self.inference_stream.update_module_snapshot(
                         "voice", {"latest_text": display_text}
                     )
 
                 # key_moment 既推推理流又推事件流
                 if key_moment:
-                    self.push_display("voice", {
-                        "localSec": local_sec,
-                        "tag": "key_moment",
-                        "data": {"key_moment": key_moment}
-                    })
-                    self.push_event(EventTopic.VOICE_KEY_MOMENT, {
-                        "localSec": local_sec,
-                        "key_moment": key_moment,
-                        # 同句全部关键词（已按句中出现位置排序）：供规则层判断
-                        # "请讲"之后是否紧跟"收到"这类同句信号，避免被漏掉
-                        "keys": event.get("keys", []),
-                    }, timestamp=local_sec)
+                    self.push_display(
+                        "voice",
+                        {
+                            "localSec": local_sec,
+                            "tag": "key_moment",
+                            "data": {"key_moment": key_moment},
+                        },
+                    )
+                    self.push_event(
+                        EventTopic.VOICE_KEY_MOMENT,
+                        {
+                            "localSec": local_sec,
+                            "key_moment": key_moment,
+                            # 同句全部关键词（已按句中出现位置排序）：供规则层判断
+                            # "请讲"之后是否紧跟"收到"这类同句信号，避免被漏掉
+                            "keys": event.get("keys", []),
+                        },
+                        timestamp=local_sec,
+                    )
 
                 # 保存归一化后的文本，确保 voice_full_text.json 中的设备码为纯英文数字
                 event["text"] = display_text if text else event.get("text", "")
@@ -231,11 +246,17 @@ class VoiceModule(BaseModule):
                 "speech_pad": voice_config.get("vad_speech_pad_sec", 0.2),
                 "min_speech": voice_config.get("vad_min_speech_sec", 0.35),
                 "max_chunk": voice_config.get("vad_max_chunk_sec", 30.0),
-                "split_search_sec": voice_config.get("vad_split_search_sec", 1.0),
-                "split_margin_db": voice_config.get("vad_split_margin_db", 6.0),
+                "split_search_sec": voice_config.get(
+                    "vad_split_search_sec", 1.0
+                ),
+                "split_margin_db": voice_config.get(
+                    "vad_split_margin_db", 6.0
+                ),
                 # fixed_window 策略参数
                 "window_sec": voice_config.get("fixed_window_sec", 20.0),
-                "overlap_sec": voice_config.get("fixed_window_overlap_sec", 5.0),
+                "overlap_sec": voice_config.get(
+                    "fixed_window_overlap_sec", 5.0
+                ),
             },
             boundary_overlap_sec=voice_config.get("boundary_overlap_sec", 0.4),
             block_sec=voice_config.get("stream_block_sec", 0.2),
@@ -246,7 +267,8 @@ class VoiceModule(BaseModule):
 
         logger.info(
             "流式语音处理完成，共 %d 个事件，句子组装器: %s",
-            len(self._events), assembler.describe(),
+            len(self._events),
+            assembler.describe(),
         )
 
     def _resolve_source(self, video_path: str) -> str:
@@ -267,10 +289,15 @@ class VoiceModule(BaseModule):
                 self.paths.base_dir
                 / self.config.get("voice", {}).get(
                     "source",
-                    self.config.get("videos", {}).get("front", "data/videos/camFRONT.mpg"),
+                    self.config.get("videos", {}).get(
+                        "front", "data/videos/camFRONT.mpg"
+                    ),
                 )
             )
-        if not Path(video_path).is_absolute() and not Path(video_path).exists():
+        if (
+            not Path(video_path).is_absolute()
+            and not Path(video_path).exists()
+        ):
             return str(self.paths.base_dir / video_path)
         return video_path
 

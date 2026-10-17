@@ -30,6 +30,7 @@
 保护词默认为 `KEYWORD_LABELS` 中长度 ≥ 2 的关键词（见 `resolve_protected_words`），
 也可通过 `voice.protected_words` 覆盖。
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,15 +43,27 @@ DEDUP_TOLERANCE_SEC = 0.02
 
 # 保护词兜底表（当无法从 KEYWORD_LABELS 派生时使用）
 DEFAULT_PROTECTED_WORDS: Tuple[str, ...] = (
-    "一回路", "二回路", "机组长", "请讲", "请监护", "请求监护", "收到",
-    "执行", "核对", "核实", "信息通报", "通报完毕",
+    "一回路",
+    "二回路",
+    "机组长",
+    "请讲",
+    "请监护",
+    "请求监护",
+    "收到",
+    "执行",
+    "核对",
+    "核实",
+    "信息通报",
+    "通报完毕",
 )
 
 # 句尾是保护词未完成前缀时，额外挂起封句的最长秒数（防止上屏被无限延迟）
 DEFAULT_PROTECTED_HOLD_SEC = 2.0
 
 
-def resolve_protected_words(override: Optional[Sequence[str]] = None) -> Tuple[str, ...]:
+def resolve_protected_words(
+    override: Optional[Sequence[str]] = None,
+) -> Tuple[str, ...]:
     """解析生效的保护词表.
 
     优先使用调用方覆盖值；否则从 `speech_transcriber.KEYWORD_LABELS` 派生
@@ -118,7 +131,9 @@ def tail_breaks_protected_word(
     return False
 
 
-def tail_is_protected_prefix(tail_text: str, protected_words: Sequence[str]) -> bool:
+def tail_is_protected_prefix(
+    tail_text: str, protected_words: Sequence[str]
+) -> bool:
     """判断待拼句尾是否为某个保护词的**未完成前缀**.
 
     用于 `tick()`：此时还不知道下一个词是什么，只能先把句子挂起，等新词到达后
@@ -171,7 +186,9 @@ class SentenceAssembler:
         self.protected_words = tuple(resolve_protected_words(protected_words))
         self.protected_hold_sec = max(0.0, float(protected_hold_sec))
         # 句尾缓冲只需覆盖"保护词长度 - 1"个字符，避免每次拼接整句
-        max_word_len = max((len(word) for word in self.protected_words), default=0)
+        max_word_len = max(
+            (len(word) for word in self.protected_words), default=0
+        )
         self._tail_horizon = max(0, max_word_len - 1)
         self._tail_text = ""
         # 已消费词的结束时间上界：用于丢弃重叠区里被重复解码的词
@@ -218,7 +235,8 @@ class SentenceAssembler:
         sealed: List[List[Dict[str, Any]]] = []
         for word_item in accepted:
             if self._pending and (
-                word_item["start"] - self._pending[-1]["end"] > self.sentence_gap_sec
+                word_item["start"] - self._pending[-1]["end"]
+                > self.sentence_gap_sec
             ):
                 # 词完整性保护：切点落在保护词内部时不封句，继续拼接
                 if tail_breaks_protected_word(
@@ -226,7 +244,8 @@ class SentenceAssembler:
                 ):
                     logger.debug(
                         "保护词跨出停顿拼接: 句尾=%r + %r",
-                        self._tail_text, word_item["word"],
+                        self._tail_text,
+                        word_item["word"],
                     )
                 else:
                     sealed.append(self._take_pending())
@@ -297,7 +316,9 @@ class SentenceAssembler:
         self._pending.append(word_item)
         self._last_end = max(self._last_end, word_item["end"])
         if self._tail_horizon > 0:
-            self._tail_text = (self._tail_text + word_item["word"])[-self._tail_horizon:]
+            merged = self._tail_text + word_item["word"]
+            keep_from = max(0, len(merged) - self._tail_horizon)
+            self._tail_text = merged[keep_from:]
 
     def _is_overflow(self) -> bool:
         """判断当前句是否超出长度上限，需要强制封口.

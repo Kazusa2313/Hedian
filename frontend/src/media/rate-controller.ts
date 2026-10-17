@@ -19,14 +19,14 @@ export class RateController {
   update(levels: number[], currentRate: number, supplyEstimate = 1.0): number {
     let target: number
     if (levels.length === 0) {
-      target = 1.0                                        // 全部完成: 正常速度播完余量
+      target = 1.0 // 全部完成: 正常速度播完余量
     } else {
       const minLevel = Math.min(...levels)
       if (minLevel < 1) {
-        target = currentRate * 0.7                        // 撞墙紧急刹车(水位见底)
+        target = currentRate * 0.7 // 撞墙紧急刹车(水位见底)
       } else {
-        target = Math.min(PLAYBACK.RATE_MAX, Math.max(PLAYBACK.RATE_MIN, supplyEstimate))  // 贴供给走
-        if (minLevel < 3) target = Math.min(target, currentRate)   // 低水位只降不升(防撞墙)
+        target = Math.min(PLAYBACK.RATE_MAX, Math.max(PLAYBACK.RATE_MIN, supplyEstimate)) // 贴供给走
+        if (minLevel < 3) target = Math.min(target, currentRate) // 低水位只降不升(防撞墙)
       }
     }
     target = Math.min(PLAYBACK.RATE_MAX, Math.max(PLAYBACK.RATE_MIN, target))

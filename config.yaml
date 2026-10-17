@@ -23,8 +23,8 @@ paths:
   result_root: "data/results"
 
 videos:
-  front: "/home/yehaomin/asr/data/segment002.mpg"
-  pop: "/home/yehaomin/asr/data/segment002.mpg"
+  front: "data/videos/camFRONT.mpg"
+  pop: "data/videos/camPOP.mpg"
 
 supervision:
   bind_hold_sec: 10.0
@@ -52,7 +52,7 @@ voice:
   # 否则"句边界比段边界更敏感"，会造成大量段内无意义断句（岗位词被切开的元凶之一）
   sentence_gap_sec: 1.0
   asr_engine: "qwen3"
-  model_path: "/home/yehaomin/asr/models/Qwen3-ASR-0.6B-finetuned-v570e"
+  model_path: "models/voice/qwen/Qwen3-ASR-0.6B"
   aligner_path: "models/voice/qwen/Qwen3-ForcedAligner-0.6B"
   torch_dtype: "bfloat16"
   # VAD 分段参数（对齐 run_infer.py 评估链路）

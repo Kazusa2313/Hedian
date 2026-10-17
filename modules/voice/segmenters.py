@@ -18,6 +18,7 @@
 新增策略只需继承 `BaseSegmenter` 并用 `@register_segmenter` 装饰即可，便于
 持续试验"哪种切片转录效果更好"。
 """
+
 from __future__ import annotations
 
 import logging
@@ -76,7 +77,9 @@ class BaseSegmenter(ABC):
 
     # ── 对外接口 ────────────────────────────────────────────────
 
-    def push(self, pcm: np.ndarray, start_sec: Optional[float] = None) -> List[Segment]:
+    def push(
+        self, pcm: np.ndarray, start_sec: Optional[float] = None
+    ) -> List[Segment]:
         """喂入一块 PCM，返回本次判定出的、已经闭合的语音区间.
 
         Args:
@@ -90,7 +93,9 @@ class BaseSegmenter(ABC):
             return []
         pcm = np.asarray(pcm, dtype=np.float32).reshape(-1)
         if start_sec is None:
-            start_sec = self._pending_start + len(self._pending) / self.sample_rate
+            start_sec = (
+                self._pending_start + len(self._pending) / self.sample_rate
+            )
         start_sec = float(start_sec)
 
         if self._pending.size == 0:
@@ -104,7 +109,8 @@ class BaseSegmenter(ABC):
             frame = self._pending[: self._frame_len]
             frame_start = self._pending_start
             segments.extend(self._consume_frame(frame, frame_start))
-            self._pending = self._pending[self._frame_len:]
+            frame_len = self._frame_len
+            self._pending = self._pending[frame_len:]
             self._pending_start = frame_start + self._frame_dur
         return segments
 
@@ -116,7 +122,9 @@ class BaseSegmenter(ABC):
         """
         segments: List[Segment] = []
         if self._pending.size > 0:
-            segments.extend(self._consume_frame(self._pending, self._pending_start))
+            segments.extend(
+                self._consume_frame(self._pending, self._pending_start)
+            )
             self._pending = np.zeros((0,), dtype=np.float32)
         segments.extend(self._finish())
         return segments
@@ -143,7 +151,9 @@ class BaseSegmenter(ABC):
     # ── 子类实现 ────────────────────────────────────────────────
 
     @abstractmethod
-    def _consume_frame(self, frame: np.ndarray, frame_start: float) -> List[Segment]:
+    def _consume_frame(
+        self, frame: np.ndarray, frame_start: float
+    ) -> List[Segment]:
         """处理单个 20ms 帧.
 
         Args:
@@ -174,7 +184,9 @@ class BaseSegmenter(ABC):
             编号后的区间.
         """
         segment = Segment(
-            index=self._index, start=round(float(start), 3), end=round(float(end), 3)
+            index=self._index,
+            start=round(float(start), 3),
+            end=round(float(end), 3),
         )
         self._index += 1
         return segment
@@ -232,7 +244,9 @@ class SilenceVadSegmenter(BaseSegmenter):
         # 最近若干帧的 (帧结束时间, dB)，用于强制切分时找最低能量点
         self._recent: deque = deque()
 
-    def _consume_frame(self, frame: np.ndarray, frame_start: float) -> List[Segment]:
+    def _consume_frame(
+        self, frame: np.ndarray, frame_start: float
+    ) -> List[Segment]:
         """在线判决单帧：维护语音/静音状态机并产出闭合区间.
 
         Args:
@@ -244,7 +258,7 @@ class SilenceVadSegmenter(BaseSegmenter):
         """
         frame_dur = len(frame) / self.sample_rate
         frame_end = frame_start + frame_dur
-        rms = float(np.sqrt(np.mean(frame ** 2))) if frame.size else 0.0
+        rms = float(np.sqrt(np.mean(frame**2))) if frame.size else 0.0
         db = 20.0 * float(np.log10(rms + 1e-10))
         is_voice = db > self.noise_db
 
@@ -273,7 +287,10 @@ class SilenceVadSegmenter(BaseSegmenter):
                 self._silence_run = 0.0
 
         # 长语音保护：超过 max_chunk 在最低能量点切分，避免硬切在字中间
-        if self._in_speech and (frame_end - self._speech_start) >= self.max_chunk:
+        if (
+            self._in_speech
+            and (frame_end - self._speech_start) >= self.max_chunk
+        ):
             cut = self._pick_split_point(self._speech_start + self.max_chunk)
             segment = self._emit(self._speech_start, cut)
             if segment is not None:
@@ -408,7 +425,9 @@ class FixedWindowSegmenter(BaseSegmenter):
         self._next_start = 0.0
         self._cursor_end = 0.0
 
-    def _consume_frame(self, frame: np.ndarray, frame_start: float) -> List[Segment]:
+    def _consume_frame(
+        self, frame: np.ndarray, frame_start: float
+    ) -> List[Segment]:
         """推进游标并在窗口填满时产出区间.
 
         Args:
@@ -422,7 +441,9 @@ class FixedWindowSegmenter(BaseSegmenter):
         segments: List[Segment] = []
         while self._next_start + self.window_sec <= self._cursor_end:
             segments.append(
-                self._new_segment(self._next_start, self._next_start + self.window_sec)
+                self._new_segment(
+                    self._next_start, self._next_start + self.window_sec
+                )
             )
             self._next_start += self._step
         return segments
@@ -487,7 +508,9 @@ def available_segmenters() -> List[str]:
     return sorted(_SEGMENTER_REGISTRY)
 
 
-def build_segmenter(name: str, sample_rate: int = SAMPLE_RATE, **cfg: Any) -> BaseSegmenter:
+def build_segmenter(
+    name: str, sample_rate: int = SAMPLE_RATE, **cfg: Any
+) -> BaseSegmenter:
     """按名字构造切片策略实例.
 
     Args:

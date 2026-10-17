@@ -16,6 +16,7 @@
 配合 `modules/voice/segmenters.py` 的在线切片，即可实现"读到一段语音就解一段"
 的流式解码。
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,9 +36,14 @@ INT16_SCALE = 32768.0
 
 # ffmpeg 视为"无 EOF 直播源"的协议前缀
 _LIVE_SCHEMES = (
-    "rtsp://", "rtmps://", "rtmp://",
-    "http://", "https://",
-    "udp://", "tcp://", "srt://",
+    "rtsp://",
+    "rtmps://",
+    "rtmp://",
+    "http://",
+    "https://",
+    "udp://",
+    "tcp://",
+    "srt://",
 )
 
 
@@ -88,7 +94,9 @@ class PcmStream:
         self._extra_input_args = list(extra_input_args or [])
         self._proc: Optional[subprocess.Popen] = None
         # 单块目标采样数；实际读取以字节数为准，末尾块可能更短
-        self._block_samples = max(1, int(round(self.block_sec * self.sample_rate)))
+        self._block_samples = max(
+            1, int(round(self.block_sec * self.sample_rate))
+        )
         self.live = is_live_source(self.source)
 
     # ── 命令与环境 ──────────────────────────────────────────────
@@ -99,17 +107,27 @@ class PcmStream:
         Returns:
             ffmpeg 参数列表.
         """
-        cmd = [self.ffmpeg_bin, "-hide_banner", "-nostats", "-loglevel", "error"]
+        cmd = [
+            self.ffmpeg_bin,
+            "-hide_banner",
+            "-nostats",
+            "-loglevel",
+            "error",
+        ]
         if self.live:
             # 直播源：优先 TCP（丢包可见、可重连），并设置读取超时避免永久挂起
             cmd += ["-rtsp_transport", "tcp", "-rw_timeout", "15000000"]
         cmd += self._extra_input_args
         cmd += [
-            "-i", self.source,
+            "-i",
+            self.source,
             "-vn",
-            "-ac", "1",
-            "-ar", str(self.sample_rate),
-            "-f", "s16le",
+            "-ac",
+            "1",
+            "-ar",
+            str(self.sample_rate),
+            "-f",
+            "s16le",
             "-",
         ]
         return cmd
@@ -166,10 +184,12 @@ class PcmStream:
             pass
 
     def __enter__(self) -> "PcmStream":
+        """进入 with 块: 打开音频流并返回自身."""
         self.open()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        """退出 with 块: 关闭音频流."""
         self.close()
 
     # ── 读取 ────────────────────────────────────────────────────
@@ -193,7 +213,10 @@ class PcmStream:
                 raw = raw[:-1]
             if not raw:
                 continue
-            pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / INT16_SCALE
+            pcm = (
+                np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+                / INT16_SCALE
+            )
             yield pcm
 
 
@@ -211,7 +234,9 @@ class PcmRing:
     超出部分按整块丢弃，保证内存与音频总时长无关。
     """
 
-    def __init__(self, retain_sec: float, sample_rate: int = SAMPLE_RATE) -> None:
+    def __init__(
+        self, retain_sec: float, sample_rate: int = SAMPLE_RATE
+    ) -> None:
         """初始化环形缓冲.
 
         Args:
@@ -224,7 +249,9 @@ class PcmRing:
         self._start_sec: Optional[float] = None
         self._end_sec: float = 0.0
 
-    def append(self, pcm: np.ndarray, start_sec: Optional[float] = None) -> None:
+    def append(
+        self, pcm: np.ndarray, start_sec: Optional[float] = None
+    ) -> None:
         """追加一块 PCM，并按保留窗口裁剪历史.
 
         Args:
@@ -270,8 +297,12 @@ class PcmRing:
             if chunk_end <= start_sec or chunk_start >= end_sec:
                 continue
             # 换算到块内样本下标，四舍五入保证相邻段拼接无累积漂移
-            local_start = int(round((max(start_sec, chunk_start) - chunk_start) * self._sr))
-            local_end = int(round((min(end_sec, chunk_end) - chunk_start) * self._sr))
+            local_start = int(
+                round((max(start_sec, chunk_start) - chunk_start) * self._sr)
+            )
+            local_end = int(
+                round((min(end_sec, chunk_end) - chunk_start) * self._sr)
+            )
             local_start = max(0, min(local_start, len(chunk)))
             local_end = max(0, min(local_end, len(chunk)))
             if local_end > local_start:

@@ -1,5 +1,4 @@
-"""
-流程事件记录器.
+"""流程事件记录器.
 
 职责：
 - 订阅事件流中的 FLOW_STARTED / FLOW_ENDED
@@ -8,6 +7,7 @@
 
 规则层（rules）负责流程识别，因此流程记录也归属 rules 层。
 """
+
 import json
 import logging
 import os
@@ -34,8 +34,9 @@ class FlowEventRecorder:
         self._completed_flows: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
 
-        self._event_bus.subscribe(EventTopic.FLOW_STARTED,
-                                  self._on_flow_started)
+        self._event_bus.subscribe(
+            EventTopic.FLOW_STARTED, self._on_flow_started
+        )
         self._event_bus.subscribe(EventTopic.FLOW_ENDED, self._on_flow_ended)
         logger.info("FlowEventRecorder 已订阅 FLOW_STARTED/FLOW_ENDED")
 
@@ -68,7 +69,9 @@ class FlowEventRecorder:
 
         with self._lock:
             self._active_flows[flow_id] = dict(payload)
-        logger.info(f"记录流程开始 flow_id={flow_id} type={payload.get('flow_type')}")
+        logger.info(
+            f"记录流程开始 flow_id={flow_id} type={payload.get('flow_type')}"
+        )
 
     def _on_flow_ended(self, event: Dict[str, Any]) -> None:
         """处理流程结束事件：合并开始/结束信息并保存."""
@@ -116,7 +119,8 @@ class FlowEventRecorder:
             self._completed_flows.append(flow_record)
 
         logger.info(
-            f"记录流程结束 flow_id={flow_id} type={flow_record['flow_type']}")
+            f"记录流程结束 flow_id={flow_id} type={flow_record['flow_type']}"
+        )
         self._save_flow_events()
 
     def _save_flow_events(self) -> None:

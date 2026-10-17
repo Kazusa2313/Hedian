@@ -3,8 +3,12 @@
 // 状态量(人数/凝视)实时显示只存最新值(常数内存), 无需驱逐
 import { metrics } from './metrics'
 
+/** 保留策略中心(播完释放): 报告副本释放策略(视频媒体窗口由 MediaBuffer 自治) */
 export class RetentionCenter {
-  /** 报告副本释放: 完成态后 streamBuffer 与 reportText 等价, 置空(显示 fallback reportText) */
+  /**
+   * 报告副本释放: 完成态后 streamBuffer 与 reportText 等价, 置空(显示 fallback reportText).
+   * @param card 待释放的报告卡片(仅触碰 streamBuffer 字段)
+   */
   releaseReportCopy(card: { streamBuffer: string }): void {
     if (card.streamBuffer) {
       card.streamBuffer = ''
@@ -13,5 +17,5 @@ export class RetentionCenter {
   }
 }
 
-// 模块级单例(无状态策略对象, usePlayback/useReports 共享)
+/** 模块级单例(无状态策略对象, usePlayback/useReports 共享) */
 export const retentionCenter = new RetentionCenter()

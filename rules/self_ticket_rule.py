@@ -1,5 +1,4 @@
-"""
-自唱票制度.
+"""自唱票制度.
 
 实现 BaseRule 接口，管理自唱票流程。
 
@@ -8,6 +7,7 @@
   内容：操作员读出设备九字码 → 执行操作 → 确认
   结束：下一个自唱票开始 或 监护制结束
 """
+
 import logging
 from typing import Any, Dict, Optional
 
@@ -73,16 +73,20 @@ class SelfTicketRule(BaseRule):
         self._confirm_closed = False
 
         if self._event_bus:
-            self._event_bus.publish(EventTopic.FLOW_STARTED, {
-                "flow_id": self._flow_id,
-                "flow_type": "self_ticket",
-                "flow_start_sec": timestamp,
-                "device_code": device_code,
-            },
-                                    timestamp=timestamp)
+            self._event_bus.publish(
+                EventTopic.FLOW_STARTED,
+                {
+                    "flow_id": self._flow_id,
+                    "flow_type": "self_ticket",
+                    "flow_start_sec": timestamp,
+                    "device_code": device_code,
+                },
+                timestamp=timestamp,
+            )
 
         logger.info(
-            f"流程开始 flow_id={self._flow_id} @{timestamp:.1f}s 设备={device_code}")
+            f"流程开始 flow_id={self._flow_id} @{timestamp:.1f}s 设备={device_code}"
+        )
 
     def _close_flow(
         self, timestamp: float = 0, source: str = "unknown"
@@ -113,7 +117,9 @@ class SelfTicketRule(BaseRule):
         }
 
         if self._event_bus:
-            self._event_bus.publish(EventTopic.FLOW_ENDED, flow, timestamp=timestamp)
+            self._event_bus.publish(
+                EventTopic.FLOW_ENDED, flow, timestamp=timestamp
+            )
 
         logger.info(f"流程结束 flow_id={self._flow_id} @{timestamp:.1f}s")
 
@@ -132,7 +138,15 @@ class SelfTicketRule(BaseRule):
 
         # 不是控制关键字则视为设备识别码
         is_device_code = key_moment not in [
-            "监护", "请求监护", "执行", "核对", "收到", "信息通报", "信息通告", "通报完毕", "通告完毕"
+            "监护",
+            "请求监护",
+            "执行",
+            "核对",
+            "收到",
+            "信息通报",
+            "信息通告",
+            "通报完毕",
+            "通告完毕",
         ]
         if is_device_code:
             # 设计说明：自唱票流程暂不自动启动（待弹窗模块实现后由弹窗信号触发），

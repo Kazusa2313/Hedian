@@ -11,9 +11,17 @@ const flowTypeMap: Record<FlowType, [string, string]> = {
   supervision: ['#00d4ff', '监护制'],
   self_ticket: ['#ffaa00', '自唱票'],
   info_notice: ['#00ffcc', '信息通报'],
-  normal_comm: ['#00ff88', '普通沟通'],
+  normal_comm: ['#00ff88', '普通沟通']
 }
 
+/**
+ * 通知数据(状态量+事件流双语义):
+ * 状态量(人数/凝视): 后端 globalSec 对齐后实时推送, 前端收到即实时显示(推理侧视角, 不被播放时刻卡住);
+ * 事件流(流程开始/结束): 与画面严格同步(sec ≤ 播放时刻, 播放侧视角).
+ * @param _currentPlaybackSec 主时钟引用(事件流同步过滤用, 预留参数)
+ * @returns 状态量 refs / 同步后的 `flowEvents`, 以及 `addTracking`/`addGaze`/`addFlow`
+ *   三个消息入口与 `reset`
+ */
 export function useNotify(_currentPlaybackSec: Ref<number>) {
   // 状态量: 实时显示后端对齐推送的最新值(常量内存, 无需时序池/驱逐)
   const people = ref<PeopleState>({ count: '--', alert: '就绪', alertColor: '#8899aa' })
@@ -21,13 +29,17 @@ export function useNotify(_currentPlaybackSec: Ref<number>) {
   const rawFlowEvents = ref<FlowEvent[]>([])
 
   function addTracking(d: unknown): void {
-    const src = d as { tag?: string; localSec?: number; data?: { count?: number; state_alert?: string } }
+    const src = d as {
+      tag?: string
+      localSec?: number
+      data?: { count?: number; state_alert?: string }
+    }
     if (src.tag !== 'PEOPLE_COUNT_UPDATE') return
     const dt = src.data || {}
     people.value = {
       count: dt.count ?? '--',
       alert: dt.state_alert ? '⚠️ ' + dt.state_alert : '✅ 当前人数正常',
-      alertColor: dt.state_alert ? '#ff4d4d' : '#00ff88',
+      alertColor: dt.state_alert ? '#ff4d4d' : '#00ff88'
     }
     log.debug(`人数更新 localSec=${src.localSec} count=${dt.count}`)
   }
@@ -37,20 +49,33 @@ export function useNotify(_currentPlaybackSec: Ref<number>) {
     if (!arr || !arr[0]?.data) return
     const dt = arr[0].data
     gaze.value = {
-      hasHeads: !!dt.has_heads, headsCount: (dt.heads_count as number) || 0,
-      anyInRoi: !!dt.any_in_roi, awayDuration: (dt.away_duration as number) || 0,
+      hasHeads: !!dt.has_heads,
+      headsCount: (dt.heads_count as number) || 0,
+      anyInRoi: !!dt.any_in_roi,
+      awayDuration: (dt.away_duration as number) || 0
     }
   }
 
   function addFlow(d: unknown, isStart: boolean): void {
-    const src = d as { localSec?: number; sec?: number; flowType?: FlowType; data?: Record<string, unknown> }
+    const src = d as {
+      localSec?: number
+      sec?: number
+      flowType?: FlowType
+      data?: Record<string, unknown>
+    }
     const dt = src.data || {}
-    const sec = Number(isStart
-      ? (dt.flow_start_sec || src.localSec || src.sec || 0)
-      : (dt.flow_end_sec || src.localSec || src.sec || 0))
+    const sec = Number(
+      isStart
+        ? dt.flow_start_sec || src.localSec || src.sec || 0
+        : dt.flow_end_sec || src.localSec || src.sec || 0
+    )
     const flowType = ((dt.flow_type as FlowType) || src.flowType || 'supervision') as FlowType
     const [color, name] = flowTypeMap[flowType]
-    if (rawFlowEvents.value.find(e => e.flowType === flowType && Math.abs(e.sec - sec) < 0.1 && e.isStart === isStart)) {
+    if (
+      rawFlowEvents.value.find(
+        (e) => e.flowType === flowType && Math.abs(e.sec - sec) < 0.1 && e.isStart === isStart
+      )
+    ) {
       return
     }
     const item: FlowEvent = {
@@ -59,7 +84,7 @@ export function useNotify(_currentPlaybackSec: Ref<number>) {
       name,
       color,
       isStart,
-      flowId: Number(dt.flow_id || 0),
+      flowId: Number(dt.flow_id || 0)
     }
     // 有序插入，而不是无脑 push。
     // 原因：App.vue 是「先把整批 flow_start 全部塞进列表，再塞 flow_end」，
@@ -68,10 +93,13 @@ export function useNotify(_currentPlaybackSec: Ref<number>) {
     // 排序键：sec 升序 → flow_id 升序 → 同一 flow 内"开始"在"结束"之前。
     //   · 被新的普通沟通顶掉：同一秒「旧流程结束(小 flow_id)」→「新流程开始(大 flow_id)」
     //   · 同句应答：同一秒、同一个 flow_id 的「开始」→「结束」
-    const keyOf = (e: FlowEvent): [number, number, number] =>
-      [e.sec, e.flowId ?? 0, e.isStart ? 0 : 1]
+    const keyOf = (e: FlowEvent): [number, number, number] => [
+      e.sec,
+      e.flowId ?? 0,
+      e.isStart ? 0 : 1
+    ]
     const keyNew = keyOf(item)
-    const idx = rawFlowEvents.value.findIndex(e => {
+    const idx = rawFlowEvents.value.findIndex((e) => {
       const k = keyOf(e)
       if (k[0] !== keyNew[0]) return k[0] > keyNew[0]
       if (k[1] !== keyNew[1]) return k[1] > keyNew[1]
@@ -83,7 +111,7 @@ export function useNotify(_currentPlaybackSec: Ref<number>) {
 
   // 事件流: 严格同步, 与画面同一时刻(无提前量)
   const flowEvents = computed(() =>
-    rawFlowEvents.value.filter(e => e.sec <= _currentPlaybackSec.value)
+    rawFlowEvents.value.filter((e) => e.sec <= _currentPlaybackSec.value)
   )
 
   function reset(): void {

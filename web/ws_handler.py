@@ -5,6 +5,7 @@
   2. 视频流 fMP4 段(二进制帧):带标注的 fragmented MP4,前端 MSE 播放
 并支持独立文本直推与前端播放时钟感知.
 """
+
 import asyncio
 import json
 import logging
@@ -100,7 +101,9 @@ class WSHandler:
         """接受并注册新的客户端 WebSocket 连接,并补发已缓存的视频流 init 段."""
         await websocket.accept()
         self._active_connections.append(websocket)
-        logger.info(f"WebSocket 客户端已连接，当前在线: {len(self._active_connections)}")
+        logger.info(
+            f"WebSocket 客户端已连接，当前在线: {len(self._active_connections)}"
+        )
         # 新连接:立即下发已缓存的视频流 init 段(若本轮推理已产出)
         await self._send_cached_vis_inits(websocket)
         # 补发状态快照: 总时长+当前推理秒+状态, 前端刷新即恢复进度条
@@ -114,7 +117,9 @@ class WSHandler:
         """
         if websocket in self._active_connections:
             self._active_connections.remove(websocket)
-            logger.info(f"WebSocket 客户端已断开，当前在线: {len(self._active_connections)}")
+            logger.info(
+                f"WebSocket 客户端已断开，当前在线: {len(self._active_connections)}"
+            )
 
     def reset(self) -> None:
         """重置播放时钟状态与视频流 init 缓存."""
@@ -200,7 +205,9 @@ class WSHandler:
         """向新连接补发已缓存的 init 段(保证后到连接能从 init 解码)."""
         for view, data in self._vis_init_cache.items():
             try:
-                await websocket.send_bytes(self._build_vis_payload(view, "init", data))
+                await websocket.send_bytes(
+                    self._build_vis_payload(view, "init", data)
+                )
             except Exception as error:
                 logger.error(f"补发 init 段失败 [{view}]: {error}")
 
@@ -221,7 +228,9 @@ class WSHandler:
                     connection.send_bytes(payload), self._loop
                 )
             except Exception as send_error:
-                logger.error(f"推送 vis chunk 失败 [{view}/{seg_type}]: {send_error}")
+                logger.error(
+                    f"推送 vis chunk 失败 [{view}/{seg_type}]: {send_error}"
+                )
 
     def clear_vis_cache(self) -> None:
         """清空视频流 init 缓存(新一轮推理开始前调用)."""

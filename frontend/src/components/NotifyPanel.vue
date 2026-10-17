@@ -18,7 +18,10 @@ useScrollBottom(flowEl, () => props.flowEvents.length)
 
 // 监控室人数颜色：>=3人绿色，1-2人黄色，0人红色
 function peopleColor(): string {
-  const n = typeof props.people.count === 'number' ? props.people.count : parseInt(String(props.people.count), 10)
+  const n =
+    typeof props.people.count === 'number'
+      ? props.people.count
+      : parseInt(String(props.people.count), 10)
   if (isNaN(n) || n === 0) return '#ff4d4d'
   if (n >= 3) return '#00ff88'
   return '#ffaa00'
@@ -66,14 +69,20 @@ function awayPct() {
             </span>
             <span class="stat-unit">人专注</span>
           </div>
-          <div class="gaze-progress-wrap" v-if="gaze.hasHeads && !gaze.anyInRoi">
+          <div v-if="gaze.hasHeads && !gaze.anyInRoi" class="gaze-progress-wrap">
             <div class="gaze-progress-track">
-              <div class="gaze-progress-bar" :style="{
-                width: awayPct() + '%',
-                background: gaze.awayDuration >= 60 ? '#ff4d4d' : '#ffaa00'
-              }"></div>
+              <div
+                class="gaze-progress-bar"
+                :style="{
+                  width: awayPct() + '%',
+                  background: gaze.awayDuration >= 60 ? '#ff4d4d' : '#ffaa00'
+                }"
+              ></div>
             </div>
-            <span class="gaze-progress-text" :style="{ color: gaze.awayDuration >= 60 ? '#ff4d4d' : '#94a3b8' }">
+            <span
+              class="gaze-progress-text"
+              :style="{ color: gaze.awayDuration >= 60 ? '#ff4d4d' : '#94a3b8' }"
+            >
               {{ gaze.awayDuration >= 60 ? '⚠️ ' : '' }}{{ Math.round(gaze.awayDuration) }}/60S
             </span>
           </div>
@@ -81,8 +90,13 @@ function awayPct() {
       </div>
     </div>
     <!-- [事件流状态栏] 流程事件列表: 累积显示已发生的流程开始/结束 -->
-    <div class="flow-events" ref="flowEl">
-      <div v-for="ev in flowEvents" :key="ev.flowType + ev.sec + ev.isStart" class="flow-event" :style="{ borderLeftColor: ev.color }">
+    <div ref="flowEl" class="flow-events">
+      <div
+        v-for="ev in flowEvents"
+        :key="ev.flowType + ev.sec + ev.isStart"
+        class="flow-event"
+        :style="{ borderLeftColor: ev.color }"
+      >
         <span class="ts">[{{ fmt(ev.sec) }}]</span>
         <span :style="{ color: ev.color }">{{ ev.name }}{{ ev.isStart ? '开始' : '结束' }}</span>
       </div>

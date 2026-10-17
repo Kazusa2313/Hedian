@@ -12,6 +12,14 @@ function parseReportContent(text: string): { think: string; report: string } {
   return { think, report }
 }
 
+/**
+ * 慢速逐字打字机: setInterval 驱动, 模拟大模型流式输出.
+ * streamBuffer 按 chunk 累积(后端到达), shownLen 逐字追赶; 追完 + reportText 到达 → 切 streaming=false.
+ * 停止条件: 所有卡片转完成态才停(防 chunk 续到时 timer 已停致卡死).
+ * @param cards 报告卡片列表(响应式)
+ * @param step 逐字间隔毫秒数, 默认 60ms(~16 字/秒)
+ * @returns `shownLen` 各卡片已展示长度 / `shownText` 按字段截取当前应展示文本
+ */
 export function useTypewriter(cards: Ref<SegCard[]>, step = 60) {
   const shownLen = ref<Record<string, number>>({})
   let timerId: ReturnType<typeof setInterval> | null = null
@@ -29,15 +37,24 @@ export function useTypewriter(cards: Ref<SegCard[]>, step = 60) {
       }
     }
     // 所有卡片转完成态才停(防 chunk 续到时 timer 已停致卡死; 60ms 空转开销可忽略)
-    if (!cards.value.some(c => c.streaming) && timerId !== null) { clearInterval(timerId); timerId = null }
+    if (!cards.value.some((c) => c.streaming) && timerId !== null) {
+      clearInterval(timerId)
+      timerId = null
+    }
   }
 
   // 有 streaming 卡片即启动, 一直跑到全部完成
-  watch(() => cards.value.some(c => c.streaming), (has) => {
-    if (has && timerId === null) timerId = setInterval(tick, step)
-  }, { immediate: true })
+  watch(
+    () => cards.value.some((c) => c.streaming),
+    (has) => {
+      if (has && timerId === null) timerId = setInterval(tick, step)
+    },
+    { immediate: true }
+  )
 
-  onBeforeUnmount(() => { if (timerId !== null) clearInterval(timerId) })
+  onBeforeUnmount(() => {
+    if (timerId !== null) clearInterval(timerId)
+  })
 
   // 截 streamBuffer 按 shownLen, 再 parse 出对应 field(think+report 都逐字)
   function shownText(card: SegCard, field: 'think' | 'report'): string {

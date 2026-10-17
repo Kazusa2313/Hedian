@@ -3,6 +3,7 @@
 所有制度实现 BaseRule 接口。
 RuleRegistry 自动发现 rules/ 子目录中的制度。
 """
+
 import importlib
 import logging
 import os
@@ -91,7 +92,7 @@ class RuleRegistry:
             package_path = os.path.dirname(package.__file__)
 
             for _, name, is_pkg in pkgutil.iter_modules([package_path]):
-                if name in ("base", ):
+                if name in ("base",):
                     continue
                 try:
                     module = importlib.import_module(f"rules.{name}")
@@ -100,7 +101,9 @@ class RuleRegistry:
                         self._rules[rule.name()] = rule
                         logger.info(f"发现制度: {rule.name()}")
                 except Exception as error:
-                    logger.error(f"加载制度 {name} 失败: {error}", exc_info=True)
+                    logger.error(
+                        f"加载制度 {name} 失败: {error}", exc_info=True
+                    )
 
         except Exception as error:
             logger.error(f"扫描制度目录失败: {error}", exc_info=True)
@@ -136,13 +139,17 @@ class RuleRegistry:
                 flow = rule.finalize()
                 if flow:
                     logger.info(
-                        f"制度 {rule.name()} finalize 关闭流程 flow_id={flow.get('flow_id')}"
+                        f"制度 {rule.name()} finalize 关闭流程 "
+                        f"flow_id={flow.get('flow_id')}"
                     )
             except Exception as error:
-                logger.error(f"制度 {rule.name()} finalize 失败: {error}",
-                             exc_info=True)
+                logger.error(
+                    f"制度 {rule.name()} finalize 失败: {error}", exc_info=True
+                )
             try:
                 rule.save_results(result_dir)
             except Exception as error:
-                logger.error(f"制度 {rule.name()} save_results 失败: {error}",
-                             exc_info=True)
+                logger.error(
+                    f"制度 {rule.name()} save_results 失败: {error}",
+                    exc_info=True,
+                )

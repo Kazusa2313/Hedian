@@ -22,6 +22,7 @@ logs/
 .venv/
 venv/
 env/
+config.local.yaml
 
 # Data directory
 data/
@@ -35,6 +36,9 @@ docs/
 # Frontend dependencies
 frontend/node_modules/
 
+# Frontend build output (不入版本库, 部署与本地运行前需自行构建)
+frontend/dist/
+
 # Backup files
 *.bak
 *.bak.*
@@ -42,11 +46,6 @@ frontend/node_modules/
 # Markdown files
 *.md
 !README.md
-!CHANGELOG.md
 !RELEASE.md
 
 
-
-# Frontend build artifacts
-frontend/dist/
-*.tsbuildinfo

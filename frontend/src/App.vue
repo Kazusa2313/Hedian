@@ -52,7 +52,11 @@ const popPanelRef = ref<InstanceType<typeof VideoPanel> | null>(null)
 
 // 页面加载/刷新即重置:kill 推理子进程 + 清空状态,保证每次从干净状态开始
 onMounted(() => {
-  resetPipeline().catch(() => { /* 失败也继续本地重置 */ }).finally(resetAll)
+  resetPipeline()
+    .catch(() => {
+      /* 失败也继续本地重置 */
+    })
+    .finally(resetAll)
 })
 
 function handleStart() {
@@ -105,7 +109,7 @@ const ws = {
   totalScore: reports.totalScore,
   avgScore: reports.avgScore,
   toggleCard: reports.toggleCard,
-  resetState: resetAll,
+  resetState: resetAll
 }
 </script>
 

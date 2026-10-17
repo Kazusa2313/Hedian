@@ -1,4 +1,5 @@
 """Gaze 结果存储：保存注视告警关键事件."""
+
 import logging
 from typing import Dict, List
 
@@ -12,7 +13,7 @@ class GazeStorage(BaseStorage):
     """保存凝视告警关键事件（gaze_key_moments.json）."""
 
     def __init__(self, paths: PathConfig) -> None:
-        """初始化存储。
+        """初始化存储.
 
         Args:
             paths: 路径配置。

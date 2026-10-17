@@ -18,6 +18,7 @@
 说明：50s 超时由独立计时器（threading.Timer）实现，不依赖任何 tracker 事件；
 结束时间固定为 开始时间点 + 50s（视频时间轴），不受模块推理速度差影响。
 """
+
 import logging
 import threading
 from typing import Any, Dict, Optional
@@ -94,20 +95,27 @@ class NormalCommRule(BaseRule):
         self._last_post_word_ts = -999.0
 
         if self._event_bus:
-            self._event_bus.publish(EventTopic.FLOW_STARTED, {
-                "flow_id": self._flow_id,
-                "flow_type": "normal_comm",
-                "flow_start_sec": timestamp,
-                "start_source": source,
-            }, timestamp=timestamp)
+            self._event_bus.publish(
+                EventTopic.FLOW_STARTED,
+                {
+                    "flow_id": self._flow_id,
+                    "flow_type": "normal_comm",
+                    "flow_start_sec": timestamp,
+                    "start_source": source,
+                },
+                timestamp=timestamp,
+            )
 
         logger.info(
-            f"普通沟通流程开始 flow_id={self._flow_id} @{timestamp:.1f}s source={source}"
+            f"普通沟通流程开始 flow_id={self._flow_id} @{timestamp:.1f}s "
+            f"source={source}"
         )
 
         # 超时计时器：到点自动结束，结束时间固定为 开始时间点 + MAX_FLOW_SEC（视频时间轴）
         self._cancel_timer()
-        self._timeout_timer = threading.Timer(MAX_FLOW_SEC, self._on_timer_timeout)
+        self._timeout_timer = threading.Timer(
+            MAX_FLOW_SEC, self._on_timer_timeout
+        )
         self._timeout_timer.daemon = True
         self._timeout_timer.start()
 
@@ -141,7 +149,9 @@ class NormalCommRule(BaseRule):
         }
 
         if self._event_bus:
-            self._event_bus.publish(EventTopic.FLOW_ENDED, flow, timestamp=timestamp)
+            self._event_bus.publish(
+                EventTopic.FLOW_ENDED, flow, timestamp=timestamp
+            )
 
         logger.info(
             f"普通沟通流程结束 flow_id={self._flow_id} @{timestamp:.1f}s "
@@ -203,13 +213,18 @@ class NormalCommRule(BaseRule):
 
         if self._active:
             # 2) "收到"提前结束（仅在窗口内有效；超出窗口交由第 3 条按超时收尾）
-            if key_moment == "收到" and timestamp - self._flow_start_sec <= MAX_FLOW_SEC:
+            if (
+                key_moment == "收到"
+                and timestamp - self._flow_start_sec <= MAX_FLOW_SEC
+            ):
                 self._close_flow(timestamp, source="recv_ack")
                 return
 
             # 3) 超时收尾：不 return，让同一条事件继续参与第 4/5 步的判定
             if timestamp - self._flow_start_sec >= MAX_FLOW_SEC:
-                self._close_flow(self._flow_start_sec + MAX_FLOW_SEC, source="timeout")
+                self._close_flow(
+                    self._flow_start_sec + MAX_FLOW_SEC, source="timeout"
+                )
 
             # 4) 被新的普通沟通顶掉：岗位词后 START_WINDOW_SEC 内出现"请讲"
             if self._active and key_moment == "请讲":
@@ -265,7 +280,8 @@ class NormalCommRule(BaseRule):
         except ValueError:
             # 当前词不在列表中（异常数据）：只要本句含"收到"即按同句应答处理
             return "收到" in ordered
-        return "收到" in ordered[index + 1:]
+        tail_start = index + 1
+        return "收到" in ordered[tail_start:]
 
     def reset(self) -> None:
         """重置普通沟通状态，防止新一轮推理混入旧流程状态."""

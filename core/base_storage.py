@@ -2,6 +2,7 @@
 
 封装通用的原子性 JSON 保存逻辑, 供各业务模块的结果存储器继承.
 """
+
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ logger = logging.getLogger("core.storage")
 class BaseStorage:
     """结果存储抽象基类, 封装通用的原子性 JSON 保存逻辑."""
 
-    def __init__(self, paths: PathConfig, module_name: str):
+    def __init__(self, paths: PathConfig, module_name: str) -> None:
         """初始化.
 
         Args:
@@ -48,11 +49,13 @@ class BaseStorage:
             保存成功返回 True, 失败记录日志后返回 False.
         """
         if output_path is None:
-            output_path = str(self._paths.get_result_path(
-                run_id=run_id,
-                module=self._module_name,
-                filename=filename,
-            ))
+            output_path = str(
+                self._paths.get_result_path(
+                    run_id=run_id,
+                    module=self._module_name,
+                    filename=filename,
+                )
+            )
         try:
             temp_path = str(output_path) + ".tmp"
             with open(temp_path, "w", encoding="utf-8") as f:

@@ -1,5 +1,4 @@
-"""
-人员状态监控制度.
+"""人员状态监控制度.
 
 实现 BaseRule 接口，管理人员状态监控规程。
 
@@ -8,6 +7,7 @@
    离开盘台超过 1 分钟时，进行一次记录。
 2. 监视主控室人数，当人员少于 1 人时，进行一次记录。
 """
+
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -47,8 +47,9 @@ class PersonnelStatusRule(BaseRule):
         """
         self._event_bus = event_bus
         event_bus.subscribe(EventTopic.GAZE_ALERT, self._on_gaze_alert)
-        event_bus.subscribe(EventTopic.TRACKER_HEADCOUNT,
-                            self._on_people_count)
+        event_bus.subscribe(
+            EventTopic.TRACKER_HEADCOUNT, self._on_people_count
+        )
 
     def is_active(self) -> bool:
         """人员状态监控始终是激活状态."""
@@ -64,9 +65,13 @@ class PersonnelStatusRule(BaseRule):
         if self._no_people_start_ts is not None:
             duration = self._last_event_ts - self._no_people_start_ts
             if duration >= 10.0:
-                description = f"警报：主控室无人值守（人员少于1人）持续超过10S（实际持续 {duration:.1f}秒）"
+                description = (
+                    f"警报：主控室无人值守（人员少于1人）持续超过10S"
+                    f"（实际持续 {duration:.1f}秒）"
+                )
                 logger.warning(
-                    f"人员状态违规 (PeopleCount/Finalize): {description} @{self._last_event_ts:.1f}s"
+                    f"人员状态违规 (PeopleCount/Finalize): {description} "
+                    f"@{self._last_event_ts:.1f}s"
                 )
                 violation = {
                     "localSec": self._no_people_start_ts,
@@ -90,7 +95,9 @@ class PersonnelStatusRule(BaseRule):
 
         # 只有持续超过60秒才记录违规
         if away_duration < 60:
-            logger.debug(f"凝视告警忽略: 仅 {away_duration:.1f}秒，未达60秒阈值")
+            logger.debug(
+                f"凝视告警忽略: 仅 {away_duration:.1f}秒，未达60秒阈值"
+            )
             return
 
         description = f"警报：两名操纵员视线同时离开盘台持续超过1分钟（实际持续 {away_duration:.1f}秒）"
@@ -119,29 +126,35 @@ class PersonnelStatusRule(BaseRule):
         if count < 1:
             if self._no_people_start_ts is None:
                 self._no_people_start_ts = ts
-                logger.info(f"人员状态监控: 开始记录无人值守状态计时 @{ts:.1f}s")
+                logger.info(
+                    f"人员状态监控: 开始记录无人值守状态计时 @{ts:.1f}s"
+                )
         else:
             # 人数恢复到 >= 1 人，检查是否满足 10S 阈值
-            if self._no_people_start_ts is not None:
-                duration = ts - self._no_people_start_ts
-                if duration >= 10.0:
-                    description = f"警报：主控室无人值守（人员少于1人）持续超过10S（实际持续 {duration:.1f}秒）"
-                    logger.warning(
-                        f"人员状态违规 (PeopleCount): {description} @{ts:.1f}s")
+            duration = ts - self._no_people_start_ts
+            if duration >= 10.0:
+                description = (
+                    f"警报：主控室无人值守（人员少于1人）持续超过10S"
+                    f"（实际持续 {duration:.1f}秒）"
+                )
+                logger.warning(
+                    f"人员状态违规 (PeopleCount): {description} @{ts:.1f}s"
+                )
 
-                    violation = {
-                        "localSec": self._no_people_start_ts,
-                        "event": "NO_OPERATOR_VIOLATION",
-                        "count": 0,
-                        "duration": round(duration, 2),
-                        "source": "tracker",
-                        "description": description,
-                    }
-                    self._violations.append(violation)
-                else:
-                    logger.info(
-                        f"人员状态监控: 无人值守时长仅 {duration:.1f}秒，未达10S阈值，不作记录")
-                self._no_people_start_ts = None
+                violation = {
+                    "localSec": self._no_people_start_ts,
+                    "event": "NO_OPERATOR_VIOLATION",
+                    "count": 0,
+                    "duration": round(duration, 2),
+                    "source": "tracker",
+                    "description": description,
+                }
+                self._violations.append(violation)
+            else:
+                logger.info(
+                    f"人员状态监控: 无人值守时长仅 {duration:.1f}秒，未达10S阈值，不作记录"
+                )
+            self._no_people_start_ts = None
 
     def reset(self) -> None:
         """重置人员状态监控，防止新一轮推理混入旧的违规记录."""
