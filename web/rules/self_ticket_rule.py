@@ -1,0 +1,158 @@
+"""
+自唱票制度.
+
+实现 BaseRule 接口，管理自唱票流程。
+
+自唱票流程：
+  开始：读出九字码（语音检测到设备码重复）
+  内容：操作员读出设备九字码 → 执行操作 → 确认
+  结束：下一个自唱票开始 或 监护制结束
+"""
+import logging
+from typing import Any, Dict, Optional
+
+from core.event_bus import EventBus, EventTopic
+from rules.rule_base import BaseRule
+
+logger = logging.getLogger("rules.self_ticket")
+
+
+class SelfTicketRule(BaseRule):
+    """自唱票制度."""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """初始化自唱票制度.
+
+        Args:
+            config: 制度配置字典，可为 None.
+        """
+        self._config = config or {}
+        self._event_bus: Optional[EventBus] = None
+
+        self._active = False
+        self._flow_id = 0
+        self._flow_counter = 0
+        self._flow_start_sec = 0
+        self._device_code = ""
+
+        # 内容检查
+        self._code_read = False
+        self._operation_executed = False
+        self._confirm_closed = False
+
+    def name(self) -> str:
+        """制度名称."""
+        return "self_ticket"
+
+    def subscribe_events(self, event_bus: EventBus) -> None:
+        """订阅本制度关心的事件.
+
+        Args:
+            event_bus: 事件总线.
+        """
+        self._event_bus = event_bus
+        event_bus.subscribe(EventTopic.VOICE_KEY_MOMENT, self._on_voice_intent)
+
+    def _start_flow(self, timestamp: float, device_code: str) -> None:
+        """启动自唱票流程.
+
+        Args:
+            timestamp: 流程开始时间（秒）.
+            device_code: 本次自唱票对应的设备九字码.
+        """
+        # 关闭上一个自唱票
+        if self._active:
+            self._close_flow(timestamp, source="new_ticket")
+
+        self._active = True
+        self._flow_id = self._next_flow_id()
+        self._flow_start_sec = timestamp
+        self._device_code = device_code
+        self._code_read = False
+        self._operation_executed = False
+        self._confirm_closed = False
+
+        if self._event_bus:
+            self._event_bus.publish(EventTopic.FLOW_STARTED, {
+                "flow_id": self._flow_id,
+                "flow_type": "self_ticket",
+                "flow_start_sec": timestamp,
+                "device_code": device_code,
+            },
+                                    timestamp=timestamp)
+
+        logger.info(
+            f"流程开始 flow_id={self._flow_id} @{timestamp:.1f}s 设备={device_code}")
+
+    def _close_flow(
+        self, timestamp: float = 0, source: str = "unknown"
+    ) -> Dict[str, Any]:
+        """关闭自唱票流程并发布 FLOW_ENDED 事件.
+
+        Args:
+            timestamp: 流程结束时间（秒）.
+            source: 结束来源（如 new_ticket）.
+
+        Returns:
+            流程事件字典；无活跃流程时返回 None.
+        """
+        if not self._active:
+            return None
+
+        flow = {
+            "flow_id": self._flow_id,
+            "flow_type": "self_ticket",
+            "flow_start_sec": self._flow_start_sec,
+            "flow_end_sec": timestamp,
+            "flow_continue_sec": round(timestamp - self._flow_start_sec, 2),
+            "end_source": source,
+            "device_code": self._device_code,
+            "code_read": self._code_read,
+            "operation_executed": self._operation_executed,
+            "confirm_closed": self._confirm_closed,
+        }
+
+        if self._event_bus:
+            self._event_bus.publish(EventTopic.FLOW_ENDED, flow, timestamp=timestamp)
+
+        logger.info(f"流程结束 flow_id={self._flow_id} @{timestamp:.1f}s")
+
+        self._active = False
+        self._flow_id = 0
+        self._device_code = ""
+
+        return flow
+
+    def _on_voice_intent(self, event: Dict[str, Any]) -> None:
+        """处理语音事件."""
+        payload = event.get("data", {})
+        key_moment = payload.get("key_moment", "")
+        if not key_moment:
+            return
+
+        # 不是控制关键字则视为设备识别码
+        is_device_code = key_moment not in [
+            "监护", "请求监护", "执行", "核对", "收到", "信息通报", "信息通告", "通报完毕", "通告完毕"
+        ]
+        if is_device_code:
+            # 设计说明：自唱票流程暂不自动启动（待弹窗模块实现后由弹窗信号触发），
+            # 当前仅登记设备码读取状态，不调用 self._start_flow。
+            if self._active:
+                self._code_read = True
+
+    def reset(self) -> None:
+        """重置自唱票状态，防止新一轮推理混入旧的设备码/检查状态."""
+        super().reset()
+        self._device_code = ""
+        self._code_read = False
+        self._operation_executed = False
+        self._confirm_closed = False
+
+
+def register() -> SelfTicketRule:
+    """实例化并返回自唱票制度实例.
+
+    Returns:
+        可注册到注册表的自唱票制度实例.
+    """
+    return SelfTicketRule()

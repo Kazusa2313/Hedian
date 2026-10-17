@@ -1,4 +1,4 @@
-# 核电站监护制合规检测系统
+# Hedian · 核电站监护制合规检测系统
 
 > 核电站主控室场景下的多模态合规性实时检测系统：分析 front（正面）与 pop（操作盘）两路音视频，判定操作人 / 监护人是否按规程执行监护制、自唱票与信息通报，并由大模型对完整流程的多模态证据链进行合规评估，前端流式可视化呈现。
 
@@ -6,7 +6,7 @@
 |------|------|
 | 前端 | Vue 3 · TypeScript · Vite · MSE 流式播放 |
 | 感知 | YOLO11 检测 · YOLO26s 姿态 · OC-SORT 跟踪 · Qwen3-ASR 语音对齐 · Qwen3-8B 评估 |
-| 代码规模 | 54 个 Python 文件 / 11,922 行 · 27 个前端源文件 / 2,871 行 |
+| 代码规模 | 58 个 Python 模块 / 约 11,000 行 · 27 个前端源文件 |
 
 ---
 
@@ -19,11 +19,9 @@
 - [部署指南](#部署指南)
 - [配置参考](#配置参考)
 - [接口参考](#接口参考)
-- [推送与交互逻辑](#推送与交互逻辑)
 - [项目结构](#项目结构)
 - [故障排查](#故障排查)
 - [开发说明](#开发说明)
-- [贡献指南](#贡献指南)
 - [许可证](#许可证)
 
 ---
@@ -55,6 +53,7 @@ flowchart LR
         R2[自唱票]
         R3[信息通报]
         R4[人员状态]
+        R5[普通沟通]
     end
 
     subgraph EVAL[evaluation/]
@@ -91,9 +90,9 @@ flowchart LR
 |------|------|------|
 | Tracker | 人员追踪 | 目标检测 + 姿态估计 + 多目标跟踪，输出操作人 / 监护人身份 |
 | Gaze | 眼睛关注度 | 头部姿态 + 视线估计，判定是否注视关键区域 |
-| Voice | 语音转录 | 字词级时间对齐 + 行业术语归一化，支撑唱票比对 |
+| Voice | 语音转录 | 流式流水线（增量读音频 + 在线切片 + 跨段成句），字词级时间对齐 + 行业术语归一化，支撑唱票比对与关键词时刻 |
 | Behavior | 行为检测 | 举手、手指屏幕、手指文件三类关键动作 |
-| Rules | 规程判定 | 监护制 / 自唱票 / 信息通报 / 人员状态 四大状态机实时研判 + 违规告警 |
+| Rules | 规程判定 | 监护制 / 自唱票 / 信息通报 / 人员状态 / 普通沟通 状态机实时研判 + 违规告警 |
 | Evaluation | 合规评估 | 大模型基于完整多模态证据链输出合规结论与打分 |
 | Frontend | 流式可视化 | 视频、字幕、关注度热力图、告警实时推送，断点续看 |
 
@@ -197,7 +196,7 @@ npm install
 npm run build
 ```
 
-构建产物**不入版本库**（`frontend/dist/` 已加入 `.gitignore`），克隆仓库后必须执行本步才能在浏览器访问页面。产物由后端以静态文件兜底方式托管，无需独立部署 Web 服务器。
+构建产物由后端以静态文件兜底方式托管，无需独立部署 Web 服务器。
 
 ### 6. 验证
 
@@ -236,12 +235,21 @@ pkill -f main.py                            # 直接结束服务
 | `videos.front` / `pop` | 见仓库 | 输入视频路径 |
 | `voice.asr_engine` | `qwen3` | 语音识别引擎 |
 | `voice.model_path` / `aligner_path` | 见仓库 | 语音模型路径 |
+| `voice.sentence_gap_sec` | `1.0` | 句边界停顿阈值（秒），须 ≥ `vad_min_silence_sec`，否则段内误断句 |
+| `voice.vad_noise_db` / `vad_min_silence_sec` / `vad_speech_pad_sec` / `vad_min_speech_sec` / `vad_max_chunk_sec` | `-35.0` / `0.8` / `0.2` / `0.35` / `30.0` | 在线切片 VAD 参数：静音阈值、最短静音、段前后保留、最短发言、单段上限 |
+| `voice.segmenter` | `silence_vad` | 切片策略：`silence_vad`（在线 VAD，默认）/ `fixed_window`（固定窗+重叠，备选） |
+| `voice.vad_split_search_sec` / `vad_split_margin_db` | `1.0` / `6.0` | silence_vad 策略的段边界精修参数 |
+| `voice.stream_block_sec` | `0.2` | 流式管道单次读取块时长（秒），越小首包延迟越低 |
+| `voice.boundary_overlap_sec` | `0.4` | 每段向前多取的左上下文（秒），降低段首丢字 |
+| `voice.protected_words` | `null` | 不可被断句切开的保护词表；`null` 自动从关键词派生，`[]` 关闭 |
+| `voice.max_sentence_sec` | `30.0` | 单句最长秒数，超长强制封句 |
+| `voice.fixed_window_sec` / `fixed_window_overlap_sec` | `20.0` / `5.0` | fixed_window 策略的窗口与重叠时长 |
 | `supervision.*` | 见仓库 | 监护制绑定的时长与距离阈值、连续帧数、告警冷却 |
 | `tracker.detection.*` | 见仓库 | 检测置信度、NMS、输入尺寸 |
 | `gaze.*` / `behavior.*` | 见仓库 | 关注度与行为判定的置信度、IoU、冷却参数 |
 | `bus.max_queue_size` | `1024` | 事件总线队列上限 |
 | `modules.*` | `true` | 各感知模块开关，未备齐资源的模块可置 `false` |
-| `rules.*` | `true` | 各规程状态机开关 |
+| `rules.*` | `true` | 各规程状态机开关（`supervision` / `self_ticket` / `info_notice` / `personnel_status` / `normal_comm`） |
 
 ---
 
@@ -260,24 +268,12 @@ pkill -f main.py                            # 直接结束服务
 | GET | `/api/video/front` | 流式下发正面视角视频（HTTP Range 206 硬解） |
 | GET | `/api/video/pop` | 流式下发操作盘视角视频 |
 
-静态资源兜底至前端 `dist/`（需先执行部署指南第 5 步构建），并强制 `no-cache` 响应头，避免部署后取到旧产物。
+静态资源兜底至前端 `dist/`，并强制 `no-cache` 响应头，避免部署后取到旧产物。
 
 ### WebSocket `ws://<host>:5002/ws/data`
 
 - **下行**：服务端推送推理事件、字幕、关注度与告警数据；连接建立时补发状态快照，刷新页面即可恢复进度。
 - **上行**：客户端上报播放进度 `{ "type": "playback_progress", "current_sec": 12.5 }`，用于多端同步。
-
----
-
-## 推送与交互逻辑
-
-- **消息通道**：WebSocket 下行分两类——二进制视频帧（fMP4 分片）与 JSON 结构化数据；上行仅播放进度。
-- **系统通知**：只推送流程开始/结束事件，以及监控室人数、凝视状态量。
-- **流程类型**：监护制、自唱票、信息通报三种。
-- **评价报告**：流程结束后触发后台异步评估，待前端播放到流程结束时刻才流式推送评分与评语。
-- **实时字幕**：按秒归并，仅显示已播时刻的条目，命中关键词高亮。
-- **双路视频**：front 为主时钟、pop 从动跟随，偏差超阈值时硬同步。
-- **刷新恢复**：连接建立即补发状态快照，刷新页面不丢进度。
 
 ---
 
@@ -290,7 +286,7 @@ pkill -f main.py                            # 直接结束服务
 │
 ├── core/                   # 事件总线 / 推理流 / 同步对齐 / 可视化编码
 ├── modules/                # 感知层：voice / tracker(+gaze) / behavior
-├── rules/                  # 规程状态机：监护制 / 自唱票 / 信息通报 / 人员状态
+├── rules/                  # 规程状态机：监护制 / 自唱票 / 信息通报 / 人员状态 / 普通沟通
 ├── evaluation/             # 评估层：大模型评估 / 数据提取 / 流程管理
 ├── web/                    # 服务层：HTTP / WebSocket / 可视化转发
 │
@@ -330,36 +326,6 @@ pkill -f main.py                            # 直接结束服务
 
 ---
 
-## 贡献指南
-
-### 开发规范
-
-- **代码风格**：Python 遵循 Google Python Style Guide（类型注解完整，docstring 使用 `Args` / `Returns` 段）；前端使用 ESLint + Prettier 统一风格，提交前确认 `npx eslint 'src/**/*.{ts,vue}'` 与 `npx prettier --check 'src/**/*.{ts,vue}'` 均无告警。
-- **组件命名**：Vue 组件使用 PascalCase（如 `VideoPanel.vue`）；组合式函数以 `use` 前缀驼峰命名（如 `usePlayback.ts`）；其余变量与函数统一 camelCase。
-- **提交规范**：遵循 Conventional Commits，格式为 `<type>(<scope>): <subject>`，如 `feat(rules): ...`、`fix(web): ...`、`docs(readme): ...`。
-- **文档注释**：Python 关键函数补 `Args` / `Returns` 段；前端导出的 API 使用 TSDoc（`@param` / `@returns`）。
-
-### 提交流程
-
-```bash
-# 1. Fork 项目并克隆到本地
-git clone https://github.com/SenpeWang/Hedian.git
-
-# 2. 创建功能分支
-git checkout -b feature/new-feature
-
-# 3. 提交更改
-git commit -m "feat: 添加新功能描述"
-
-# 4. 推送分支
-git push origin feature/new-feature
-
-# 5. 创建 Pull Request
-```
-
-提交前自查：前端改动需通过 `npx vue-tsc --noEmit` 类型检查；**不要提交构建产物 `frontend/dist/`**（已在 `.gitignore` 中），如需验证请本地 `npm run build` 后自测；不要提交本地环境文件。
-
----
-
 ## 许可证
-未经课题组许可不得外传。
+
+Internal project. 未经许可不得外传。

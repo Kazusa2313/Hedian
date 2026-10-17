@@ -1,0 +1,136 @@
+"""注视推断模块.
+
+使用 Gazelle ONNX 模型推断注视方向。
+"""
+import logging
+import os
+from typing import List, Optional, Tuple
+
+import cv2
+import numpy as np
+
+from modules.gaze.head_detector import HeadBox
+
+logger = logging.getLogger("module.gaze.estimator")
+
+
+class GazeEstimator:
+    """注视推断器.
+
+    使用 Gazelle ONNX 模型推断注视方向。
+    """
+
+    def __init__(
+        self,
+        model_path: str,
+        providers: Optional[List[str]] = None,
+    ) -> None:
+        """初始化注视推断器.
+
+        Args:
+            model_path: 模型路径。
+            providers: ONNX Runtime 提供者。
+        """
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Gazelle 模型不存在: {model_path}")
+
+        import onnxruntime
+        # 官方 API: 从 pip nvidia 包预加载 CUDA/cuDNN 库，供下方 CUDA EP 使用
+        onnxruntime.preload_dlls()
+        if providers is None:
+            providers = ["CUDAExecutionProvider"]
+
+        # 仅使用 GPU
+        session_options = onnxruntime.SessionOptions()
+        session_options.log_severity_level = 3
+
+        logger.info(
+            f"加载注视推断模型: {os.path.basename(model_path)} (provider: {providers})"
+        )
+
+        self._session = onnxruntime.InferenceSession(
+            model_path, sess_options=session_options, providers=providers
+        )
+        # 硬性要求: 仅允许 GPU 推理; CUDA EP 未生效说明已静默回退 CPU, 立即失败
+        if "CUDAExecutionProvider" not in self._session.get_providers():
+            raise RuntimeError(
+                f"Gazelle 模型 CUDAExecutionProvider 未生效(实际: {self._session.get_providers()}), "
+                "按约定禁止 CPU 回退, 拒绝启动"
+            )
+        self._input_names = [i.name for i in self._session.get_inputs()]
+        self._output_names = [o.name for o in self._session.get_outputs()]
+
+        self._heatmap_idx = (
+            self._output_names.index("heatmap")
+            if "heatmap" in self._output_names
+            else 0
+        )
+        self._in_out_score_idx = (
+            self._output_names.index("inout")
+            if "inout" in self._output_names
+            else None
+        )
+
+        logger.info(
+            f"注视推断模型加载完成, 输入: {self._input_names}, 输出: {self._output_names}"
+        )
+
+    def predict(
+        self,
+        image: np.ndarray,
+        head_boxes: List[HeadBox],
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[HeadBox]]:
+        """推断注视方向.
+
+        Args:
+            image: BGR 图像。
+            head_boxes: 头部边界框列表。
+
+        Returns:
+            (heatmaps[N,H,W], in_out_scores[N], valid_boxes)
+        """
+        if not head_boxes:
+            return None, None, []
+
+        image_h, image_w = image.shape[:2]
+        inv_width = 1.0 / float(image_w)
+        inv_height = 1.0 / float(image_h)
+
+        normalized_boxes = []
+        valid_boxes = []
+
+        for box in head_boxes:
+            x1 = np.clip(box.x1 * inv_width, 0.0, 1.0)
+            y1 = np.clip(box.y1 * inv_height, 0.0, 1.0)
+            x2 = np.clip(box.x2 * inv_width, 0.0, 1.0)
+            y2 = np.clip(box.y2 * inv_height, 0.0, 1.0)
+
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            normalized_boxes.append([x1, y1, x2, y2])
+            valid_boxes.append(box)
+
+        if not normalized_boxes:
+            return None, None, []
+
+        resized = cv2.resize(image, (640, 640), interpolation=cv2.INTER_LINEAR)
+        image_tensor = resized.transpose(2, 0, 1).astype(np.float32)
+        image_input = np.expand_dims(image_tensor, axis=0)
+        bbox_input = np.array([normalized_boxes], dtype=np.float32)
+
+        feed = {
+            self._input_names[0]: image_input,
+            self._input_names[1]: bbox_input,
+        }
+
+        outputs = self._session.run(self._output_names, feed)
+
+        heatmaps = outputs[self._heatmap_idx]
+        in_out_scores = (
+            outputs[self._in_out_score_idx]
+            if self._in_out_score_idx is not None
+            else None
+        )
+
+        return heatmaps, in_out_scores, valid_boxes
